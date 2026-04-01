@@ -15,7 +15,7 @@ public static class VaultConfigurationExtensions
                 "VAULT_TOKEN environment variable is not set. " +
                 "Set it in your shell before running the application.");
 
-        builder.Configuration.Add(new VaultConfigurationSource(vaultUrl, mountPoint, token));
+        ((IConfigurationBuilder)builder.Configuration).Add(new VaultConfigurationSource(vaultUrl, mountPoint, token));
     }
 }
 
