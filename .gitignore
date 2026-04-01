@@ -1,0 +1,48 @@
+# Build outputs
+bin/
+obj/
+out/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.swp
+
+# .NET
+*.dll
+*.exe
+*.pdb
+*.nupkg
+*.snupkg
+
+# Environment & secrets — never commit these
+appsettings.Production.json
+appsettings.*.local.json
+.env
+.env.*
+!.env.example
+secrets.json
+
+# EF Core migrations snapshot temp files
+*.designer.cs.bak
+
+# Test results
+TestResults/
+coverage/
+*.trx
+*.coveragexml
+
+# Docker
+docker-compose.override.yml
+
+# macOS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

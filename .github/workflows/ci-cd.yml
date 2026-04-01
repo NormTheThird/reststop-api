@@ -1,0 +1,213 @@
+name: RestStop API CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  HARBOR_REGISTRY: "10.47.1.106"
+  HARBOR_PROJECT: "library"
+
+jobs:
+  build:
+    runs-on: self-hosted
+    outputs:
+      image-tag: ${{ steps.build.outputs.image-tag }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Verify .NET Installation
+      run: dotnet --version
+
+    - name: Build and Test
+      run: |
+        cd src
+        dotnet restore RestStop.Api.sln
+        dotnet build RestStop.Api.sln --no-restore
+        dotnet test RestStop.Api.sln --no-build --verbosity normal
+
+    - name: Login to Harbor
+      run: |
+        echo "${{ secrets.HARBOR_PASSWORD }}" | docker login ${{ env.HARBOR_REGISTRY }} \
+          --username "${{ secrets.HARBOR_USERNAME }}" --password-stdin
+
+    - name: Build and Push API Image
+      id: build
+      run: |
+        IMAGE_TAG=${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/reststop-api:${{ github.sha }}
+        IMAGE_LATEST=${{ env.HARBOR_REGISTRY }}/${{ env.HARBOR_PROJECT }}/reststop-api:latest
+
+        docker build -f Dockerfile -t $IMAGE_TAG -t $IMAGE_LATEST .
+        docker push $IMAGE_TAG
+        docker push $IMAGE_LATEST
+
+        echo "image-tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  deploy-test:
+    needs: build
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/main'
+    environment: test
+
+    steps:
+    - name: Setup Kubernetes Config
+      run: |
+        echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+        kubectl cluster-info
+
+    - name: Create Harbor Registry Secret
+      run: |
+        export KUBECONFIG=kubeconfig
+        kubectl create secret docker-registry harbor-registry \
+          --docker-server=${{ env.HARBOR_REGISTRY }} \
+          --docker-username="${{ secrets.HARBOR_USERNAME }}" \
+          --docker-password="${{ secrets.HARBOR_PASSWORD }}" \
+          -n test --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Run Database Migrations
+      run: |
+        export KUBECONFIG=kubeconfig
+        IMAGE_TAG=${{ needs.build.outputs.image-tag }}
+
+        cat <<EOF | kubectl apply -f -
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: reststop-migrate-${{ github.sha }}
+          namespace: test
+        spec:
+          ttlSecondsAfterFinished: 300
+          template:
+            spec:
+              restartPolicy: Never
+              imagePullSecrets:
+              - name: harbor-registry
+              containers:
+              - name: migrate
+                image: $IMAGE_TAG
+                env:
+                - name: RUN_MIGRATIONS
+                  value: "true"
+                - name: ASPNETCORE_ENVIRONMENT
+                  value: "Production"
+                - name: VAULT_TOKEN
+                  value: "${{ secrets.VAULT_TOKEN }}"
+                - name: Vault__Url
+                  value: "http://vault.local:30420"
+                - name: Vault__MountPoint
+                  value: "reststop"
+        EOF
+
+        kubectl wait --for=condition=complete job/reststop-migrate-${{ github.sha }} \
+          -n test --timeout=120s
+
+    - name: Deploy API
+      run: |
+        export KUBECONFIG=kubeconfig
+        IMAGE_TAG=${{ needs.build.outputs.image-tag }}
+
+        cat <<EOF | kubectl apply -f -
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: reststop-api
+          namespace: test
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: reststop-api
+          template:
+            metadata:
+              labels:
+                app: reststop-api
+            spec:
+              imagePullSecrets:
+              - name: harbor-registry
+              containers:
+              - name: reststop-api
+                image: $IMAGE_TAG
+                ports:
+                - containerPort: 8080
+                env:
+                - name: ASPNETCORE_ENVIRONMENT
+                  value: "Production"
+                - name: ASPNETCORE_URLS
+                  value: "http://*:8080"
+                - name: VAULT_TOKEN
+                  value: "${{ secrets.VAULT_TOKEN }}"
+                - name: Vault__Url
+                  value: "http://vault.local:30420"
+                - name: Vault__MountPoint
+                  value: "reststop"
+                resources:
+                  requests:
+                    memory: "256Mi"
+                    cpu: "200m"
+                  limits:
+                    memory: "512Mi"
+                    cpu: "500m"
+                livenessProbe:
+                  httpGet:
+                    path: /health
+                    port: 8080
+                  initialDelaySeconds: 30
+                  periodSeconds: 10
+                readinessProbe:
+                  httpGet:
+                    path: /health
+                    port: 8080
+                  initialDelaySeconds: 5
+                  periodSeconds: 5
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: reststop-api-service
+          namespace: test
+        spec:
+          selector:
+            app: reststop-api
+          ports:
+          - port: 8080
+            targetPort: 8080
+            protocol: TCP
+          type: ClusterIP
+        ---
+        apiVersion: networking.k8s.io/v1
+        kind: Ingress
+        metadata:
+          name: reststop-api-ingress
+          namespace: test
+          annotations:
+            nginx.ingress.kubernetes.io/rewrite-target: /
+        spec:
+          rules:
+          - host: api-test.reststop.local
+            http:
+              paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: reststop-api-service
+                    port:
+                      number: 8080
+        EOF
+
+        kubectl rollout status deployment/reststop-api -n test --timeout=300s
+
+  deploy-production:
+    needs: [build, deploy-test]
+    runs-on: self-hosted
+    if: false
+    environment: production
+
+    steps:
+    - name: Production Deployment Placeholder
+      run: echo "Production deployment will be implemented later"
