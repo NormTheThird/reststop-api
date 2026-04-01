@@ -73,12 +73,13 @@ jobs:
       run: |
         export KUBECONFIG=kubeconfig
         IMAGE_TAG=${{ needs.build.outputs.image-tag }}
+        JOB_NAME=reststop-migrate-${GITHUB_SHA::16}
 
         cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
         metadata:
-          name: reststop-migrate-${{ github.sha }}
+          name: $JOB_NAME
           namespace: test
         spec:
           ttlSecondsAfterFinished: 300
@@ -97,14 +98,12 @@ jobs:
                   value: "Production"
                 - name: VAULT_TOKEN
                   value: "${{ secrets.VAULT_TOKEN }}"
-                - name: Vault__Url
-                  value: "http://vault.local:30420"
-                - name: Vault__MountPoint
-                  value: "reststop"
         EOF
 
-        kubectl wait --for=condition=complete job/reststop-migrate-${{ github.sha }} \
-          -n test --timeout=120s
+        kubectl wait --for=condition=complete job/$JOB_NAME -n test --timeout=180s || \
+          (kubectl describe job/$JOB_NAME -n test && \
+           kubectl logs -l job-name=$JOB_NAME -n test --tail=50 && \
+           exit 1)
 
     - name: Deploy API
       run: |
@@ -141,10 +140,6 @@ jobs:
                   value: "http://*:8080"
                 - name: VAULT_TOKEN
                   value: "${{ secrets.VAULT_TOKEN }}"
-                - name: Vault__Url
-                  value: "http://vault.local:30420"
-                - name: Vault__MountPoint
-                  value: "reststop"
                 resources:
                   requests:
                     memory: "256Mi"
