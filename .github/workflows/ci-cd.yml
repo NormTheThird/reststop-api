@@ -52,6 +52,7 @@ jobs:
     runs-on: self-hosted
     if: github.ref == 'refs/heads/main'
     environment: test
+    timeout-minutes: 15
 
     steps:
     - name: Setup Kubernetes Config
@@ -98,6 +99,8 @@ jobs:
                   value: "Production"
                 - name: VAULT_TOKEN
                   value: "${{ secrets.VAULT_TOKEN }}"
+                - name: Vault__Url
+                  value: "http://vault.vault.svc.cluster.local:8200"
         EOF
 
         kubectl wait --for=condition=complete job/$JOB_NAME -n test --timeout=180s || \
@@ -140,6 +143,8 @@ jobs:
                   value: "http://*:8080"
                 - name: VAULT_TOKEN
                   value: "${{ secrets.VAULT_TOKEN }}"
+                - name: Vault__Url
+                  value: "http://vault.vault.svc.cluster.local:8200"
                 resources:
                   requests:
                     memory: "256Mi"
@@ -195,7 +200,7 @@ jobs:
                       number: 8080
         EOF
 
-        kubectl rollout status deployment/reststop-api -n test --timeout=300s
+        kubectl rollout status deployment/reststop-api -n test --timeout=600s
 
   deploy-production:
     needs: [build, deploy-test]
