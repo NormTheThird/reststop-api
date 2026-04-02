@@ -25,18 +25,20 @@ public class VaultConfigurationProvider : ConfigurationProvider
             var client = new VaultClient(new VaultClientSettings(_vaultUrl, new TokenAuthMethodInfo(_token)));
 
             var pg = await client.V1.Secrets.KeyValue.V2.ReadSecretAsync("postgreSQL", mountPoint: _mountPoint);
-            Console.WriteLine($"[Vault] postgreSQL keys: {string.Join(", ", pg.Data.Data.Keys)}");
-            Data["ConnectionStrings:Default"] = pg.Data.Data["connectionString"].ToString()!;
+            var pgData = pg.Data.Data.ToDictionary(k => k.Key.Trim(), v => v.Value);
+            Data["ConnectionStrings:Default"] = pgData["connectionString"].ToString()!;
 
             var jwt = await client.V1.Secrets.KeyValue.V2.ReadSecretAsync("jwt", mountPoint: _mountPoint);
-            Data["Jwt:Secret"] = jwt.Data.Data["key"].ToString()!;
+            var jwtData = jwt.Data.Data.ToDictionary(k => k.Key.Trim(), v => v.Value);
+            Data["Jwt:Secret"] = jwtData["key"].ToString()!;
 
             var aws = await client.V1.Secrets.KeyValue.V2.ReadSecretAsync("aws", mountPoint: _mountPoint);
-            Data["Aws:SesAccessKeyId"]     = aws.Data.Data["sesAccessKey"].ToString()!;
-            Data["Aws:SesSecretAccessKey"] = aws.Data.Data["sesSecretKey"].ToString()!;
-            Data["Aws:SnsAccessKeyId"]     = aws.Data.Data["snsAccessKey"].ToString()!;
-            Data["Aws:SnsSecretAccessKey"] = aws.Data.Data["snsSecretKey"].ToString()!;
-            Data["Aws:Region"]             = aws.Data.Data["region"].ToString()!;
+            var awsData = aws.Data.Data.ToDictionary(k => k.Key.Trim(), v => v.Value);
+            Data["Aws:SesAccessKeyId"]     = awsData["sesAccessKey"].ToString()!;
+            Data["Aws:SesSecretAccessKey"] = awsData["sesSecretKey"].ToString()!;
+            Data["Aws:SnsAccessKeyId"]     = awsData["snsAccessKey"].ToString()!;
+            Data["Aws:SnsSecretAccessKey"] = awsData["snsSecretKey"].ToString()!;
+            Data["Aws:Region"]             = awsData["region"].ToString()!;
         }
         catch (Exception ex)
         {
