@@ -24,7 +24,7 @@ public class VaultConfigurationProvider : ConfigurationProvider
         {
             var client = new VaultClient(new VaultClientSettings(_vaultUrl, new TokenAuthMethodInfo(_token)));
 
-            var pg = await client.V1.Secrets.KeyValue.V2.ReadSecretAsync("postgresql", mountPoint: _mountPoint);
+            var pg = await client.V1.Secrets.KeyValue.V2.ReadSecretAsync("postgreSQL", mountPoint: _mountPoint);
             Data["ConnectionStrings:Default"] = pg.Data.Data["connectionString"].ToString()!;
 
             var jwt = await client.V1.Secrets.KeyValue.V2.ReadSecretAsync("jwt", mountPoint: _mountPoint);
