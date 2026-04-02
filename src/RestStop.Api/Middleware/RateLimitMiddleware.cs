@@ -64,8 +64,7 @@ public class RateLimitMiddleware
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in RateLimitMiddleware.");
-            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-            await context.Response.WriteAsync("An unexpected error occurred.");
+            throw;
         }
     }
 
