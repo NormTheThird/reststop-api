@@ -26,8 +26,7 @@ app.UseMiddleware<ExceptionMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();
 app.UseMiddleware<MinimumVersionMiddleware>();
 
-if (app.Environment.IsDevelopment())
-    app.UseSwaggerConfig();
+app.UseSwaggerConfig();
 
 app.UseHttpsRedirection();
 app.MapGet("/", () => Results.Redirect("/swagger/index.html"));
