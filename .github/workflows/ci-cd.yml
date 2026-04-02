@@ -189,6 +189,7 @@ jobs:
           annotations:
             nginx.ingress.kubernetes.io/rewrite-target: /
         spec:
+          ingressClassName: nginx
           rules:
           - host: api-test.reststop.local
             http:
